@@ -8,9 +8,15 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import android.app.AlertDialog;
 import android.app.Dialog;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -53,6 +59,8 @@ public class Listar_Notas extends AppCompatActivity {
     //FirebaseAuth auth;
     //FirebaseUser user;
 
+    private static final int NOTIFICATION_ID = 1;
+
 
 
     @Override
@@ -77,6 +85,17 @@ public class Listar_Notas extends AppCompatActivity {
         dialog = new Dialog(Listar_Notas.this);
         ListarNotasUsuarios();
 
+        // Crear el canal de notificación (solo para versiones de Android Oreo y posteriores)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            String channelId = "notas_channel";
+            String channelName = "Notas Channel";
+            int importance = NotificationManager.IMPORTANCE_DEFAULT;
+
+            NotificationChannel channel = new NotificationChannel(channelId, channelName, importance);
+            NotificationManager notificationManager = getSystemService(NotificationManager.class);
+            notificationManager.createNotificationChannel(channel);
+        }
+
     }
 
     private void ListarNotasUsuarios(){
@@ -100,6 +119,10 @@ public class Listar_Notas extends AppCompatActivity {
                         nota.getFecha_nota(),
                         nota.getEstado()
                 );
+
+                if (!nota.getEstado().equalsIgnoreCase("Finalizado")) {
+                    mostrarNotificacion(nota.getTitulo(), nota.getDescripcion());
+                }
             }
 
                 @Override
@@ -226,6 +249,9 @@ public class Listar_Notas extends AppCompatActivity {
 
         builder.create().show();
 
+        // Cancelar la notificación persistente cuando se elimina una nota
+        eliminarNotificacionPersistente();
+
     }
 
     @Override
@@ -235,6 +261,51 @@ public class Listar_Notas extends AppCompatActivity {
             firebaseRecyclerAdapter.startListening();
         }
     }
+
+
+    private void mostrarNotificacion(String titulo, String descripcion) {
+        NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        Intent intent = new Intent(this, Listar_Notas.class);
+        PendingIntent pendingIntent;
+
+        // Comprobar la versión de Android para establecer el flag de mutabilidad adecuado
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE);
+        } else {
+            pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+        }
+
+        // Construir la notificación
+        Notification notification;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            notification = new Notification.Builder(this, "notas_channel")
+                    .setContentTitle(titulo)
+                    .setContentText(descripcion)
+                    .setSmallIcon(R.drawable.ic_notification)
+                    .setContentIntent(pendingIntent)
+                    .setOngoing(true) // La notificación no se puede despejar deslizando
+                    .build();
+        } else {
+            notification = new Notification.Builder(this)
+                    .setContentTitle(titulo)
+                    .setContentText(descripcion)
+                    .setSmallIcon(R.drawable.ic_notification)
+                    .setContentIntent(pendingIntent)
+                    .setOngoing(true) // La notificación no se puede despejar deslizando
+                    .build();
+        }
+
+        // Mostrar la notificación persistente
+        notificationManager.notify(NOTIFICATION_ID, notification);
+    }
+
+    private void eliminarNotificacionPersistente() {
+        NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        notificationManager.cancel(NOTIFICATION_ID);
+    }
+
+
+
 
     @Override
     public boolean onSupportNavigateUp() {
